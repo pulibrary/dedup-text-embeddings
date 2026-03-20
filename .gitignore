@@ -1,0 +1,28 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.ruff_cache/
+.venv/
+
+# Virtual environments
+
+data_with_embeddings/*
+!data_with_embeddings/.gitkeep
+embeddings_matrix/*
+!embeddings_matrix/.gitkeep
+similarities_matrix/*
+!similarities_matrix/.gitkeep
+!pca_results/.gitkeep
+fixed_json/*
+!fixed_json/.gitkeep
+raw_data/*
+!raw_data/.gitkeep
+.DS_Store
+data_marcxml/*
+!data_marcxml/extracted
+data_marcxml/extracted/*
+!data_marcxml/extracted/.gitkeep

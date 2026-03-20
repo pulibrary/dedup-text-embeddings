@@ -1,0 +1,14 @@
+[project]
+name = "dedup-pca"
+version = "0.1.0"
+description = "Use PCA and text embeddings to support the deduplication of bibliographic records"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "pymarc>=5.3.1",
+    "ruff>=0.15.2",
+    "scikit-learn>=1.8.0",
+    "sentence-transformers>=5.2.3",
+    "statsmodels>=0.14.6",
+]
