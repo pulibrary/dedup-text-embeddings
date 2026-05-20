@@ -159,3 +159,15 @@ class IPCAOnEmbeddings:
                 euclidean_distances_in_ipca_space[euclidean_distances_in_ipca_space > 0]
             ),
         )
+if __name__ == "__main__":
+    ipca_processor = IPCAOnEmbeddings()
+    n_components = ipca_processor.calculate_number_of_components_with_pca(
+        variance_threshold=0.95
+    )
+    batch_files = sorted(glob.glob("embeddings_matrix/scsb_update_batch_*_matrix.csv"))
+    ipca_model = ipca_processor.ipca_fit(batch_files, n_components=n_components, batch_size=1000)
+    transformed_batches = ipca_processor.ipca_transform(batch_files, ipca_model)
+    X_ipca = ipca_processor.ipca_combine_transformed_batches(transformed_batches, ipca_model)
+    distances_ipca = ipca_processor.euclidean_distances_in_ipca_space(X_ipca)
+    threshold_ipca = ipca_processor.threshold_ipca(distances_ipca)
+    ipca_processor.identify_duplicates(distances_ipca, threshold_ipca)

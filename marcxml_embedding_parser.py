@@ -11,7 +11,7 @@ import numpy as np
 
 
 class MARCXMLEmbeddingParser:
-    def __init__(self, model_name="all-MiniLM-L6-v2"):
+    def __init__(self, model_name="multi-qa-mpnet-base-cos-v1"):
         self.model = SentenceTransformer(model_name)
 
     def parse_scsb_update_files(self, input_dir="data_marcxml", batch_size=10000):
@@ -26,8 +26,11 @@ class MARCXMLEmbeddingParser:
             self._save_batches(records, file_idx, xml_file, batch_size)
 
     def _find_gz_files(self, input_dir):
-        gz_files = sorted(glob.glob(os.path.join(input_dir, "scsb_update_*.xml.gz")))
-        print(f"Found {len(gz_files)} scsb_update_*.xml.gz files in {input_dir}")
+        # gz_files = sorted(glob.glob(os.path.join(input_dir, "scsb_update_*.xml.gz")))
+        # print(f"Found {len(gz_files)} scsb_update_*.xml.gz files in {input_dir}")
+        gz_files = sorted(glob.glob(os.path.join(input_dir, "fulldump_*.tar.gz")))
+        print(f"Found {len(gz_files)} fullupdate_*.xml.gz files in {input_dir}")
+        # print(f"Found {len(gz_files)} scsb_update_*.xml.gz files in {input_dir}")
         return gz_files
 
     def _extract_gz_files(self, gz_files, input_dir):
@@ -35,12 +38,30 @@ class MARCXMLEmbeddingParser:
         import gzip
 
         for gz_path in gz_files:
-            print(f"Processing {gz_path}")
-            xml_filename = os.path.basename(gz_path).replace(".xml.gz", ".xml")
-            extracted_xml_path = os.path.join(input_dir, "extracted", xml_filename)
-            with gzip.open(gz_path, "rb") as gz_file:
-                with open(extracted_xml_path, "wb") as xml_out:
-                    xml_out.write(gz_file.read())
+            # print(f"Processing {gz_path}")
+            # # xml_filename = os.path.basename(gz_path).replace(".xml.gz", ".xml")
+            # xml_filename = re.sub(
+            #     r"\.xml_new_\d+\.tar\.gz$", ".xml", os.path.basename(gz_path)
+            # )
+            # extracted_xml_path = os.path.join(input_dir, "extracted", xml_filename)
+            # with gzip.open(gz_path, "rb") as gz_file:
+            #     with open(extracted_xml_path, "wb") as xml_out:
+            #         xml_out.write(gz_file.read())
+            with tarfile.open(gz_path, "r:gz") as tar:
+                for member in tar.getmembers():
+                    if not member.isfile():
+                        continue
+                    if ".xml_new_" not in member.name and not member.name.endswith(".xml"):
+                        continue
+                    xml_filename = os.path.basename(member.name)
+                    xml_filename = re.sub(r"\.xml_new_\d+$", ".xml", xml_filename)
+
+                    extracted_xml_path = os.path.join(input_dir, "extracted", xml_filename)
+                    xml_in = tar.extractfile(member)
+                    if xml_in is None:
+                        continue
+                    with xml_in, open(extracted_xml_path, "wb") as xml_out:
+                        xml_out.write(xml_in.read())
 
     def _find_xml_files(self, input_dir):
         xml_dir = os.path.join(input_dir, "extracted")
@@ -48,7 +69,7 @@ class MARCXMLEmbeddingParser:
             [
                 os.path.join(xml_dir, f)
                 for f in os.listdir(xml_dir)
-                if f.endswith(".xml")
+                if f.endswith(".xml") and os.path.isfile(os.path.join(xml_dir, f))
             ]
         )
         return xml_files
@@ -501,5 +522,5 @@ if __name__ == "__main__":
     parser = MARCXMLEmbeddingParser()
     marcxml_dir = "data_marcxml"
     # parser.extract_and_parse_marcxml(marcxml_dir)
-    # parser.create_embedding_matrix()
+    parser.create_embedding_matrix()
     # parser.parse_scsb_update_files(input_dir=marcxml_dir, batch_size=10000)
