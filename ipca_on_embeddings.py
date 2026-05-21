@@ -109,7 +109,9 @@ class IPCAOnEmbeddings:
                 "using nearest-neighbor distance search instead."
             )
             n_neighbors = min(self._n_neighbors + 1, n_samples)
-            neighbor_model = NearestNeighbors(metric="euclidean", n_neighbors=n_neighbors)
+            neighbor_model = NearestNeighbors(
+                metric="euclidean", n_neighbors=n_neighbors
+            )
             neighbor_model.fit(X_ipca)
             neighbor_distances, neighbor_indices = neighbor_model.kneighbors(X_ipca)
             neighbor_distances = neighbor_distances[:, 1:]
@@ -118,7 +120,10 @@ class IPCAOnEmbeddings:
                 "Sample nearest-neighbor distances in IPCA space (first row):",
                 neighbor_distances[0, :5],
             )
-            print("Max nearest-neighbor distance in IPCA space:", np.max(neighbor_distances))
+            print(
+                "Max nearest-neighbor distance in IPCA space:",
+                np.max(neighbor_distances),
+            )
             print(
                 "Min nearest-neighbor distance in IPCA space:",
                 np.min(neighbor_distances[neighbor_distances > 0]),
@@ -219,15 +224,21 @@ class IPCAOnEmbeddings:
                     ]
                 ),
             )
+
+
 if __name__ == "__main__":
     ipca_processor = IPCAOnEmbeddings()
     n_components = ipca_processor.calculate_number_of_components_with_pca(
         variance_threshold=0.95
     )
     batch_files = sorted(glob.glob("embeddings_matrix/scsb_update_batch_*_matrix.csv"))
-    ipca_model = ipca_processor.ipca_fit(batch_files, n_components=n_components, batch_size=1000)
+    ipca_model = ipca_processor.ipca_fit(
+        batch_files, n_components=n_components, batch_size=1000
+    )
     transformed_batches = ipca_processor.ipca_transform(batch_files, ipca_model)
-    X_ipca = ipca_processor.ipca_combine_transformed_batches(transformed_batches, ipca_model)
+    X_ipca = ipca_processor.ipca_combine_transformed_batches(
+        transformed_batches, ipca_model
+    )
     distances_ipca = ipca_processor.euclidean_distances_in_ipca_space(X_ipca)
     threshold_ipca = ipca_processor.threshold_ipca(distances_ipca)
     ipca_processor.identify_duplicates(distances_ipca, threshold_ipca)
