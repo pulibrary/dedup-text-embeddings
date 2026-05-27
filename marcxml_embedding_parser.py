@@ -89,7 +89,7 @@ class MARCXMLEmbeddingParser:
             )
 
             for record_data, embedding in zip(pending_records, embeddings):
-                record_data["text_embedding"] = embedding.tolist()
+                record_data["text_embeddings"] = embedding.tolist()
                 ready_records.append(record_data)
 
             pending_records = []
@@ -134,6 +134,11 @@ class MARCXMLEmbeddingParser:
             pending_records.append(
                 {
                     "id": record_id,
+                    "title_display": title,
+                    "author_display": author,
+                    "pub_date_display": publication_year,
+                    "description_display": pagination,
+                    "publisher_citation_display": publisher_name,
                     "text": text,
                 }
             )
@@ -168,15 +173,16 @@ class MARCXMLEmbeddingParser:
             with open(embedding_file, "r") as f:
                 data = json.load(f)
             for item in data:
-                if "text_embedding" not in item:
+                if "text_embeddings" not in item:
                     continue
                 all_records.append(item)
-                all_embeddings.append(item["text_embedding"])
+                all_embeddings.append(item["text_embeddings"])
         if not all_records:
             print("No saved embeddings found.")
             return []
 
-        query_embedding = np.asarray(self.model.encode(query), dtype=np.float32)
+        query_embedding = self.encode_query(query, log=True)
+
         passage_embeddings = np.asarray(all_embeddings, dtype=np.float32)
         similarity = self.model.similarity(query_embedding, passage_embeddings)
 
@@ -202,7 +208,18 @@ class MARCXMLEmbeddingParser:
             )
 
         return results
+    def encode_query(self, query, log=False):
+        query_embedding = np.asarray(self.model.encode(query), dtype=np.float32)
 
+        if log:
+            print("Query text:", query)
+            print("Query embedding shape:", query_embedding.shape)
+            print("Query embedding dtype:", query_embedding.dtype)
+            print("Query embedding first 10 values:", query_embedding[:10].tolist())
+            print("Query embedding:", query_embedding)
+
+        return query_embedding
+    
     def _save_batch(self, batch, file_idx, batch_idx, xml_file):
         print(
             f"Processing batch {batch_idx} with {len(batch)} records from {xml_file}..."
@@ -495,7 +512,7 @@ class MARCXMLEmbeddingParser:
                 data = json.load(f)
             for item in data:
                 all_ids.append(item["id"])
-                all_embeddings.append(item["text_embedding"])
+                all_embeddings.append(item["text_embeddings"])
             if not all_embeddings:
                 print(f"No embeddings found in {file}.")
                 continue
@@ -515,6 +532,8 @@ if __name__ == "__main__":
     marcxml_dir = "data_marcxml"
     # parser.create_embedding_matrix()
     # 1.create embeddings
-    # parser.parse_scsb_update_files(input_dir=marcxml_dir, batch_size=10000)
+    parser.parse_scsb_update_files(input_dir=marcxml_dir, batch_size=10000)
     # 2.load saved embeddings. search
-    parser.search_saved_embeddings(query="a book about shakespeare's life", top_k=5)
+    # parser.search_saved_embeddings(query="a book about shakespeare's life", top_k=5)
+    # print query vector
+    # parser.encode_query("a book about shakespeare's life", log=True)
