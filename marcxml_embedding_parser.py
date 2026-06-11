@@ -2,7 +2,7 @@ import tarfile
 import pymarc
 import glob
 import os, tarfile, re, json
-from pymarc import parse_xml_to_array, MARCReader
+from pymarc import parse_xml_to_array
 import string
 from sentence_transformers import SentenceTransformer
 import pandas as pd
