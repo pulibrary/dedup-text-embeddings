@@ -6,6 +6,7 @@ import glob
 from sklearn.decomposition import PCA, IncrementalPCA
 from datetime import datetime
 from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics.pairwise import euclidean_distances
 from sample_embeddings_matrix import SampleEmbeddingsMatrix
 
@@ -13,6 +14,8 @@ from sample_embeddings_matrix import SampleEmbeddingsMatrix
 class IPCAOnEmbeddings:
     def __init__(self):
         self._embedding_values_cache = None
+        self._max_distance_matrix_gb = 8
+        self._n_neighbors = 10
 
     @staticmethod
     def timestamp():
@@ -95,6 +98,41 @@ class IPCAOnEmbeddings:
         return X_ipca
 
     def euclidean_distances_in_ipca_space(self, X_ipca):
+        n_samples = X_ipca.shape[0]
+        estimated_size_gb = (n_samples * n_samples * 8) / (1024**3)
+        print(
+            f"Preparing pairwise distance matrix for {n_samples} rows (~{estimated_size_gb:.2f} GB)..."
+        )
+        if estimated_size_gb > self._max_distance_matrix_gb:
+            print(
+                "Full pairwise matrix is too large to materialize; "
+                "using nearest-neighbor distance search instead."
+            )
+            n_neighbors = min(self._n_neighbors + 1, n_samples)
+            neighbor_model = NearestNeighbors(
+                metric="euclidean", n_neighbors=n_neighbors
+            )
+            neighbor_model.fit(X_ipca)
+            neighbor_distances, neighbor_indices = neighbor_model.kneighbors(X_ipca)
+            neighbor_distances = neighbor_distances[:, 1:]
+            neighbor_indices = neighbor_indices[:, 1:]
+            print(
+                "Sample nearest-neighbor distances in IPCA space (first row):",
+                neighbor_distances[0, :5],
+            )
+            print(
+                "Max nearest-neighbor distance in IPCA space:",
+                np.max(neighbor_distances),
+            )
+            print(
+                "Min nearest-neighbor distance in IPCA space:",
+                np.min(neighbor_distances[neighbor_distances > 0]),
+            )
+            return {
+                "distances": neighbor_distances,
+                "indices": neighbor_indices,
+                "estimated_size_gb": estimated_size_gb,
+            }
         distances_ipca = euclidean_distances(X_ipca)
         print(
             "Sample pairwise distances in IPCA space (first 5):", distances_ipca[0, 1:6]
@@ -107,6 +145,14 @@ class IPCAOnEmbeddings:
         return distances_ipca
 
     def threshold_ipca(self, distances_ipca):
+        if isinstance(distances_ipca, dict):
+            flat_distances = distances_ipca["distances"]
+            flat_distances = flat_distances[flat_distances > 0]
+            min_distance = np.min(flat_distances)
+            threshold_ipca = min_distance + 1e-4
+            print("Automated threshold_ipca min_distance:", threshold_ipca)
+            return threshold_ipca
+
         # return the indices for the upper triangle of the matrix;
         # get all unique pairwise distances, excluding self-distances
         flat_distances = distances_ipca[np.triu_indices_from(distances_ipca, k=1)]
@@ -119,17 +165,28 @@ class IPCAOnEmbeddings:
     def identify_duplicates(self, euclidean_distances_in_ipca_space, threshold_ipca):
         print("threshold_ipca:", threshold_ipca)
         duplicate_ipca_pairs = []
-        for i in range(euclidean_distances_in_ipca_space.shape[0]):
-            for j in range(i + 1, euclidean_distances_in_ipca_space.shape[1]):
-                if euclidean_distances_in_ipca_space[i, j] < threshold_ipca:
-                    duplicate_ipca_pairs.append((i, j))
+        if isinstance(euclidean_distances_in_ipca_space, dict):
+            neighbor_distances = euclidean_distances_in_ipca_space["distances"]
+            neighbor_indices = euclidean_distances_in_ipca_space["indices"]
+            duplicate_pairs = set()
+            for row_idx in range(neighbor_distances.shape[0]):
+                for neighbor_offset, distance in enumerate(neighbor_distances[row_idx]):
+                    if distance < threshold_ipca:
+                        col_idx = neighbor_indices[row_idx, neighbor_offset]
+                        duplicate_pairs.add(tuple(sorted((row_idx, col_idx))))
+            duplicate_ipca_pairs = sorted(duplicate_pairs)
+        else:
+            for i in range(euclidean_distances_in_ipca_space.shape[0]):
+                for j in range(i + 1, euclidean_distances_in_ipca_space.shape[1]):
+                    if euclidean_distances_in_ipca_space[i, j] < threshold_ipca:
+                        duplicate_ipca_pairs.append((i, j))
         print(
             f"Found {len(duplicate_ipca_pairs)} potential duplicate pairs in IPCA space."
         )
         # Build combined ID list from all batch JSON files
         combined_ids = []
         batch_json_files = sorted(
-            glob.glob("data_with_embeddings/scsb_update_*_batch_1.json")
+            glob.glob("data_with_embeddings/scsb_update_*_batch_*.json")
         )
         for batch_json_file in batch_json_files:
             with open(batch_json_file, "r") as f:
@@ -141,21 +198,47 @@ class IPCAOnEmbeddings:
                     ]
                 )
         if duplicate_ipca_pairs:
-            print("Duplicate pair indices and record IDs (IPCA):")
             for i, j in duplicate_ipca_pairs:
                 if i < len(combined_ids) and j < len(combined_ids):
                     id_i = combined_ids[i]
                     id_j = combined_ids[j]
                     print(f"Pair: ({i}, {j}) -> IDs: {id_i}, {id_j}")
+                else:
+                    print(f"Pair: ({i}, {j}) -> IDs not found")
+        else:
+            print("No duplicate pairs found in IPCA space.")
+        if not isinstance(euclidean_distances_in_ipca_space, dict):
+            print(
+                "Sample pairwise distances in IPCA space (first 5):",
+                euclidean_distances_in_ipca_space[0, 1:6],
+            )
+            print(
+                "Max distance in IPCA space:",
+                np.max(euclidean_distances_in_ipca_space),
+            )
+            print(
+                "Min distance in IPCA space (excluding zero):",
+                np.min(
+                    euclidean_distances_in_ipca_space[
+                        euclidean_distances_in_ipca_space > 0
+                    ]
+                ),
+            )
 
-        print(
-            "Sample pairwise distances in IPCA space (first 5):",
-            euclidean_distances_in_ipca_space[0, 1:6],
-        )
-        print("Max distance in IPCA space:", np.max(euclidean_distances_in_ipca_space))
-        print(
-            "Min distance in IPCA space (excluding zero):",
-            np.min(
-                euclidean_distances_in_ipca_space[euclidean_distances_in_ipca_space > 0]
-            ),
-        )
+
+if __name__ == "__main__":
+    ipca_processor = IPCAOnEmbeddings()
+    n_components = ipca_processor.calculate_number_of_components_with_pca(
+        variance_threshold=0.95
+    )
+    batch_files = sorted(glob.glob("embeddings_matrix/scsb_update_batch_*_matrix.csv"))
+    ipca_model = ipca_processor.ipca_fit(
+        batch_files, n_components=n_components, batch_size=1000
+    )
+    transformed_batches = ipca_processor.ipca_transform(batch_files, ipca_model)
+    X_ipca = ipca_processor.ipca_combine_transformed_batches(
+        transformed_batches, ipca_model
+    )
+    distances_ipca = ipca_processor.euclidean_distances_in_ipca_space(X_ipca)
+    threshold_ipca = ipca_processor.threshold_ipca(distances_ipca)
+    ipca_processor.identify_duplicates(distances_ipca, threshold_ipca)
